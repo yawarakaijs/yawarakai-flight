@@ -1,6 +1,6 @@
 {
   "name": "@yawarakaijs/yawarakai-flight",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Yawarakai component to query flight information",
   "main": "index.js",
   "scripts": {
@@ -18,5 +18,9 @@
   "bugs": {
     "url": "https://github.com/yawarakaijs/yawarakai-flight/issues"
   },
-  "homepage": "https://github.com/yawarakaijs/yawarakai-flight#readme"
+  "homepage": "https://github.com/yawarakaijs/yawarakai-flight#readme",
+  "dependencies": {
+    "axios": "^0.19.0",
+    "cheerio": "^1.0.0-rc.3"
+  }
 }
