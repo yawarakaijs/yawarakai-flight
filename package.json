@@ -1,0 +1,22 @@
+{
+  "name": "@yawarakaijs/yawarakai-flight",
+  "version": "1.2.0",
+  "description": "Yawarakai component to query flight information",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test/dryrun.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yawarakaijs/yawarakai-flight.git"
+  },
+  "keywords": [
+    "yawarakai"
+  ],
+  "author": "Hanami Yuna",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://github.com/yawarakaijs/yawarakai-flight/issues"
+  },
+  "homepage": "https://github.com/yawarakaijs/yawarakai-flight#readme"
+}
