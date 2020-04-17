@@ -5,7 +5,7 @@ Part of the Project Yawarakaijs
 ## Installation
 This will add the component into yawarakai instance, you don't need any configuration for this component
 ```
-$ yarn add @yawarakaijs/yawarakai-musicshare
+$ yarn add @yawarakaijs/yawarakai-flight
 ```
 
 ## Development
@@ -16,23 +16,15 @@ $ mkdir Components && cd Components
 ```
 Directly download this component as archived file and extract out
 ```
-$ wget -L https://github.com/yawarakaijs/yawarakai-musicshare/archive/master.zip -O yawarakai-musicshare.zip
-$ unzip yawarakai-musicshare.zip
+$ wget -L https://github.com/yawarakaijs/yawarakai-flight/archive/master.zip -O yawarakai-flight.zip
+$ unzip yawarakai-flight.zip
 ```
 
 ## Available Commands
-Netease CloudMusic keywords query
+Search flight info
 ```
-/netease (Under Construction)
-```
-Netease CloudMusic plylist info retrival
-```
-/playlist [text contains link format like music.163.com/playlist]
-```
-Netease CloudMusic album info retrival
-```
-/album [text contains link format like music.163.com/album]
+/flight [Flight Number(IND-0000)] [Flight Date(YYYY-MM-DD)]?
 ```
 
 ## Available InlineQueries
-Input text contains link format like `music.163.com/[playlist|song|album]`
+Input text with format like [Flight Number(IND-0000)] [Flight Date(YYYY-MM-DD)]
