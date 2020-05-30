@@ -2,15 +2,103 @@
 let axios = require('axios')
 let cheerio = require('cheerio')
 let Compo = require('../../../component')
+let pMap = require('p-map')
 
 // main
 
 let main = {
-    async getData (ctx, flightNum, flightData, date) {
+    getDetailedData(partOfFlight) {
+        return new Promise((resolve, reject) => {
+            const flightDateTimeFormat = new Intl.DateTimeFormat('en', { year: 'numeric', month: '2-digit', day: '2-digit', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit', })
+            let detailedQueryLink = `https://www.flightstats.com/v2/api-next${partOfFlight['url']}`
+            detailedQueryLink = detailedQueryLink.replace('?year=', '/').replace('&month=', '/').replace('&date=', '/').replace('&flightId=', '/')
+            
+            axios.get(detailedQueryLink).then(detailedQueryData => {
+                let detailedInfo = detailedQueryData.data
+                
+                let detailedSchedule = detailedInfo['data']['schedule']
+                let transformDateTime = (scheduleData, keys) => {
+                    for (let key of keys) {
+                        let [{ value: month },,{ value: day },,{ value: year },,{ value: hour },,{ value: minute },,{ value: second }] = flightDateTimeFormat.formatToParts(new Date(scheduleData[key]))
+                        scheduleData[key] = {
+                            "date": `${year}-${month}-${day}`,
+                            "time": `${hour}:${minute}:${second}`
+                        }
+                    }
+                }
+                transformDateTime(detailedSchedule, ['scheduledDeparture', 'estimatedActualDeparture', 'scheduledArrival', 'estimatedActualArrival'])
+                
+                let departureAirport = detailedInfo['data']['departureAirport']
+                let arrivalAirport = detailedInfo['data']['arrivalAirport']
+                
+                let flight = {
+                    num: `${partOfFlight['AR']}-${partOfFlight['NUMB']}`,
+                    date: `${detailedSchedule['scheduledDeparture']['date']}`,
+                    
+                    depart: "出发",
+                    departAirport: `${departureAirport['name']} (${departureAirport['iata']})`,
+                    departSchechuleDate: "出发日期",
+                    departSchechuleDateInfo: `${detailedSchedule['scheduledDeparture']['date']}`,
+                    departSchechuleTime: "预定出发时间",
+                    departSchechuleTimeInfo: `${detailedSchedule['scheduledDeparture']['time']} ${departureAirport['times']['scheduled']['timezone']}`,
+                    departActualTime: `${detailedSchedule['estimatedActualDepartureTitle'] === 'Actual' ? '实际' : '预计'}出发时间`,
+                    departActualTimeInfo: `${detailedSchedule['estimatedActualDeparture']['time']} ${departureAirport['times']['estimatedActual']['timezone']}`,
+                    departTerminal: "航站楼",
+                    departTerminalInfo: `${departureAirport['terminal'] === null ? '-' : departureAirport['terminal']}`,
+                    departGate: "闸口",
+                    departGateInfo: `${departureAirport['gate'] === null ? '-' : departureAirport['gate']}`,
+
+                    arrival: "抵达",
+                    arrivalAirport: `${arrivalAirport['name']} (${arrivalAirport['iata']})`,
+                    arrivalSchechuleDate: "抵达日期",
+                    arrivalSchechuleDateInfo: `${detailedSchedule['scheduledArrival']['date']}`,
+                    arrivalSchechuleTime: "预定出发时间",
+                    arrivalSchechuleTimeInfo: `${detailedSchedule['scheduledArrival']['time']} ${arrivalAirport['times']['scheduled']['timezone']}`,
+                    arrivalActualTime: `${detailedSchedule['estimatedActualArrival'] === 'Actual' ? '实际' : '预计'}抵达时间`,
+                    arrivalActualTimeInfo: `${detailedSchedule['estimatedActualArrival']['time']} ${arrivalAirport['times']['estimatedActual']['timezone']}`,
+                    arrivalTerminal: "航站楼",
+                    arrivalTerminalInfo: `${arrivalAirport['terminal'] === null ? '-' : arrivalAirport['terminal']}`,
+                    arrivalGate: "闸口",
+                    arrivalGateInfo: `${arrivalAirport['gate'] === null ? '-' : arrivalAirport['gate']}`,
+                    arrivalBaggage: "行李",
+                    arrivalBaggageInfo:  `${arrivalAirport['baggage'] === null ? '-' : arrivalAirport['baggage']}`,
+                }
+
+                let content = new Array()
+
+                content.push(`${flight.departAirport} -> ${flight.arrivalAirport}`)
+                content.push("")
+                content.push(`*${flight.depart}*`)
+                content.push(`${flight.departSchechuleDate}: *${flight.departSchechuleDateInfo}*`)
+                content.push(`${flight.departSchechuleTime}: *${flight.departSchechuleTimeInfo}*`)
+                content.push(`${flight.departActualTime}: ${flight.departActualTimeInfo}`)
+                content.push(`${flight.departTerminal}: ${flight.departTerminalInfo} ${flight.departGate}: *${flight.departGateInfo}*`)
+                content.push("")
+                content.push(`*${flight.arrival}*`)
+                content.push(`${flight.arrivalSchechuleDate}: *${flight.arrivalSchechuleDateInfo}*`)
+                content.push(`${flight.arrivalSchechuleTime}: *${flight.arrivalSchechuleTimeInfo}*`)
+                content.push(`${flight.arrivalActualTime}: ${flight.arrivalActualTimeInfo}`)
+                content.push(`${flight.arrivalTerminal}: ${flight.arrivalTerminalInfo} ${flight.arrivalGate}: *${flight.arrivalGateInfo}* ${flight.arrivalBaggage}: *${flight.arrivalBaggageInfo}*`)
+                
+                resolve({
+                    type: "article",
+                    title: `${partOfFlight['AR']}-${partOfFlight['NUMB']} ${departureAirport['iata']} -> ${arrivalAirport['iata']}`,
+                    description: `${detailedSchedule['scheduledDeparture']['date']} ${detailedSchedule['scheduledDeparture']['time']} -> ${detailedSchedule['scheduledArrival']['date']} ${detailedSchedule['scheduledArrival']['time']}`,
+                    thumb_url: "https://i.loli.net/2019/11/21/mDbIqPokTR675wn.png",
+                    input_message_content: {
+                        message_text: content.join("\n"),
+                        parse_mode: "Markdown"
+                    }
+                })
+            })
+        })
+    },
+    async getData (ctx, flightNum, flightData, date, data, type) {
         let flight
         flightNum += flightData
 
         let flightNumInputPattern = /(([a-z]\d)|([a-z]+)|(\d[a-z]))(-)\d{3,4}/gi
+        let flightStatsURLPattern = /\/flight-tracker\/([A-Za-z0-9]+)\/(\d+)\?year=(\d{4})&month=(\d{2})&date=(\d{2})&flightId=(\d+)/
 
         if (!flightNumInputPattern.test(flightNum)) {
             let flightNumInputPattern1 = /(([a-z]\d)|([a-z]+)|(\d[a-z]))( )\d{3,4}/gi
@@ -18,97 +106,79 @@ let main = {
 
             if (flightNumInputPattern1.test(flightNum)) {
                 let array = flightNum.split(' ')
-                flight = array[0] + "-" + array[1]
+                flight = {
+                    "AR": array[0],
+                    "NUMB": array[1]
+                }
             }
             if (flightNumInputPattern2.test(flightNum)) {
-                flight = flightNum.slice(0, 2) + "-" + flightNum.replace(flightNum.slice(0, 2), '')
+                flight = {
+                    "AR": flightNum.slice(0, 2),
+                    "NUMB": flightNum.replace(flightNum.slice(0, 2), '')
+                }
             }
         }
         else {
-            flight = flightNum
+            return undefined
         }
 
         let info = [flight, date]
+        Compo.Interface.Log.Log.info(ctx.from.first_name + " 申请查询航班信息: " + flight['AR'] + "-" + flight['NUMB'] + " " + info[1])
 
-        Compo.Interface.Log.Log.info(ctx.from.first_name + " 申请查询航班信息: " + info[0] + " " + info[1])
+        let link = `https://www.flightstats.com/v2/api-next/flight-tracker/other-days/${flight['AR']}/${flight['NUMB']}`
+        return axios.get(link).then(async htmlString => {
+            try {
+                let flightStatus = htmlString.data
+                if (flightStatus && flightStatus.data) {
+                    let date2
+                    if (date !== undefined) {
+                        const dateTimeFormat = new Intl.DateTimeFormat('en', { year: 'numeric', month: 'short', day: '2-digit' })
+                        let [{ value: month },,{ value: day },,{ value: year }] = dateTimeFormat.formatToParts(new Date(date))
+                        date2 = `${month}-${day}`;
+                    }
+                    else {
+                        return undefined
+                    }
 
-        // Link Prefix
-
-        let linkPrefix
-
-        switch (config.components.flight.locale) {
-            case "zh-CN":
-                linkPrefix = "https://www.cn.kayak.com/tracker/"
-                break
-            case "zh-HK":
-                linkPrefix = "https://www.kayak.com.hk/tracker/"
-                break
-            case "en-US":
-                linkPrefix = "https://www.kayak.com/tracker/"
-                break
-            default:
-                linkPrefix = "https://www.kayak.com/tracker/"
-                break
-        }
-
-        let link = linkPrefix + info[0] + "/" + info[1]
-        return axios.get(link).then(htmlString => {
-            let $ = cheerio.load(htmlString.data)
-            let flightStatus = $('div.statusLines').text().split('\n')
-            if (flightStatus[1] == undefined) {
-                Compo.Interface.Log.Log.warning(`无该航班信息 ${info[0]}。`)
+                    let allFlightRoutes = new Array()
+                    for (let data of flightStatus.data) {
+                        if (data['date2'] === date2) {
+                            let multiFlights = data['flights']
+                            for (let partOfFlight of multiFlights) {
+                                partOfFlight['AR'] = flight['AR']
+                                partOfFlight['NUMB'] = flight['NUMB']
+                                allFlightRoutes.push(partOfFlight)
+                            }
+                        }
+                    }
+                    
+                    if (type === 'inline') {
+                        let result = await pMap(allFlightRoutes, main.getDetailedData, {concurrency: 4})
+                        return { data: result }
+                    }
+                    else if (type === 'scenes' || type === 'commands') {
+                        if (allFlightRoutes.length === 1) {
+                            let result = await getDetailedData(allFlightRoutes[0])
+                            return { data: result, single: true }
+                        } else {
+                            let keys = new Array()
+                            for (let route of allFlightRoutes) {
+                                let matched = route['url'].match(flightStatsURLPattern)
+                                if (matched) {
+                                    keys.push([{
+                                        text: `${route['departureAirport']['city']} (${route['departureAirport']['iata']}) ${route['departureTime24']} -> ${route['arrivalAirport']['city']} (${route['arrivalAirport']['iata']}) ${route['arrivalTime24']}`,
+                                        callback_data: `flight://null?f=${matched[1]}:${matched[2]}:${matched[3]}-${matched[4]}-${matched[5]}:${matched[6]}`
+                                    }])
+                                }
+                            }
+                            return { data: keys, single: false }
+                        }
+                    }
+                }                
+            } catch (err) {
+                Compo.Interface.Log.Log.warning(`无法获取 flightstats 数据 ${flight['AR']}-${flight['NUMB']}。`)
                 return undefined
             }
-
-            let flight = {
-                num: info[0],
-                date: info[1],
-
-                depart: flightStatus[1],
-                departAirport: flightStatus[2],
-                departSchechuleDate: flightStatus[3],
-                departSchechuleDateInfo: flightStatus[4],
-                departSchechuleTime: flightStatus[5],
-                departSchechuleTimeInfo: flightStatus[6],
-                departActualTime: flightStatus[7],
-                departActualTimeInfo: flightStatus[8],
-                departTerminal: flightStatus[9],
-                departTerminalInfo: flightStatus[10],
-                departGate: flightStatus[11],
-                departGateInfo: flightStatus[12],
-
-                arrival: flightStatus[14],
-                arrivalAirport: flightStatus[15],
-                arrivalSchechuleDate: flightStatus[16],
-                arrivalSchechuleDateInfo: flightStatus[17],
-                arrivalSchechuleTime: flightStatus[18],
-                arrivalSchechuleTimeInfo: flightStatus[19],
-                arrivalActualTime: flightStatus[20],
-                arrivalActualTimeInfo: flightStatus[21],
-                arrivalTerminal: flightStatus[22],
-                arrivalTerminalInfo: flightStatus[23],
-                arrivalGate: flightStatus[24],
-                arrivalGateInfo: flightStatus[25],
-            }
-
-            let data = new Array()
-
-            data.push(`${flight.departAirport} -> ${flight.arrivalAirport}`)
-            data.push("")
-            data.push(`*${flight.depart}*`)
-            data.push(`${flight.departSchechuleDate}: *${flight.departSchechuleDateInfo}*`)
-            data.push(`${flight.departSchechuleTime}: *${flight.departSchechuleTimeInfo}*`)
-            data.push(`${flight.departActualTime}: ${flight.departActualTimeInfo}`)
-            data.push(`${flight.departTerminal}: ${flight.departTerminalInfo} ${flight.departGate}: *${flight.departGateInfo}*`)
-            data.push("")
-            data.push(`*${flight.arrival}*`)
-            data.push(`${flight.arrivalSchechuleDate}: *${flight.arrivalSchechuleDateInfo}*`)
-            data.push(`${flight.arrivalSchechuleTime}: *${flight.arrivalSchechuleTimeInfo}*`)
-            data.push(`${flight.arrivalActualTime}: ${flight.arrivalActualTimeInfo}`)
-            data.push(`${flight.arrivalTerminal}: ${flight.arrivalTerminalInfo} ${flight.arrivalGate}: *${flight.arrivalGateInfo}*`)
-
-            data = { data: data.join("\n"), flight: flight }
-            return data
         })
     },
     sceneEnterCount: 0
@@ -194,7 +264,7 @@ exports.commands = {
             }
 
             let message = await this.telegram.sendMessage(ctx.message.chat.id, "正在申请查询航班信息...")
-            let result = await main.getData(ctx, flightNum, flightData, date, data).catch(err => {
+            let result = await main.getData(ctx, flightNum, flightData, date, data, 'commands').catch(err => {
                 Compo.Interface.Log.Log.fatal(err)
                 this.telegram.sendMessage(ctx.message.chat.id, "抱歉，航班查询服务目前暂不可用。", { reply_to_message_id: ctx.message.message_id })
             })
@@ -202,17 +272,26 @@ exports.commands = {
                 this.telegram.sendMessage(ctx.message.chat.id, "找不到这个航班呢喵 qwq\n可能是搜索的日期没有该航班呢", { reply_to_message_id: ctx.message.message_id })
                 return undefined
             }
-            this.telegram.sendMessage(ctx.message.chat.id, result.data, { reply_to_message_id: ctx.message.message_id, parse_mode: "Markdown" })
-            this.telegram.deleteMessage(message.chat.id, message.message_id)
+            
+            if (result.single === true) {
+                this.telegram.sendMessage(ctx.message.chat.id, result.data, { reply_to_message_id: ctx.message.message_id, parse_mode: "Markdown" })
+                this.telegram.deleteMessage(message.chat.id, message.message_id)
+            } else {
+                this.telegram.sendMessage(context.ctx.message.chat.id, "是哪一段航程呢～？", {
+                    reply_markup: {
+                        inline_keyboard: result.data
+                    },
+                    parse_mode: "Markdown"
+                })
+            }
+
             return undefined
         }
-
     }
 }
 
 exports.scenes = {
     async flight (context) {
-
         let status = scene.status(context.ctx)
         let stage = status.stage
         switch (stage) {
@@ -245,17 +324,10 @@ exports.scenes = {
                     if (!date || date == null) {
                         date = CurrentTime
                     }
-                    else {
-                        dateInfo = date[0].replace("-", "")
-                        let dateRange = CurrentTimeInfo + 6
-                        if (dateInfo > dateRange) {
-                            this.telegram.sendMessage(ctx.message.chat.id, "不能查询那个日期的航班喔，只能查询最近 7 天的航班呢w \n很抱歉啦，也有正在尽力寻找其他解决办法呢w", { reply_to_message_id: ctx.message.message_id })
-                            break
-                        }
-                    }
+
                     this.telegram.sendMessage("好的呢，稍等一下哦")
                     let message = await this.telegram.sendMessage(ctx.message.chat.id, "正在申请查询航班信息...")
-                    let result = await main.getData(ctx, flightNum, flightData, date, data).catch(err => {
+                    let result = await main.getData(ctx, flightNum, flightData, date, data, 'scenes').catch(err => {
                         Compo.Interface.Log.Log.fatal(err)
                         this.telegram.sendMessage(ctx.message.chat.id, "抱歉，航班查询服务目前暂不可用。", { reply_to_message_id: ctx.message.message_id })
                     })
@@ -265,8 +337,17 @@ exports.scenes = {
                         break
                     }
                     
-                    this.telegram.sendMessage(ctx.message.chat.id, result.data, { reply_to_message_id: ctx.message.message_id, parse_mode: "Markdown" })
-                    this.telegram.deleteMessage(message.chat.id, message.message_id)
+                    if (result.single === true) {
+                        this.telegram.sendMessage(ctx.message.chat.id, result.data, { reply_to_message_id: ctx.message.message_id, parse_mode: "Markdown" })
+                        this.telegram.deleteMessage(message.chat.id, message.message_id)
+                    } else {
+                        this.telegram.sendMessage(context.ctx.message.chat.id, "是哪一段航程呢～？", {
+                            reply_markup: {
+                                inline_keyboard: result.data
+                            },
+                            parse_mode: "Markdown"
+                        })
+                    }
 
                     scene.exit(context.ctx)
                     break
@@ -319,25 +400,51 @@ exports.inlines = {
             }
         }
 
-        let result = await main.getData(ctx, flightNum, flightData, date, data).catch(err => {
+        let result = await main.getData(ctx, flightNum, flightData, date, data, 'inline').catch(err => {
             return undefined
         })
         if (result == undefined) {
             return undefined
         }
         else {
-            date = new Date(result.flight.date)
+            result.data.map(elt => elt['id'] = ctx.inlineQuery.id)
+            return result.data
+        }
+    }
+}
 
-            data = [{
-                type: "article",
-                id: ctx.inlineQuery.id,
-                title: result.flight.num + " " + result.flight.departSchechuleDateInfo,
-                description: result.flight.departSchechuleTimeInfo + " -> " + result.flight.arrivalActualTimeInfo,
-                thumb_url: "https://i.loli.net/2019/11/21/mDbIqPokTR675wn.png",
-                input_message_content: { message_text: result.data, parse_mode: "Markdown" }
-            }]
-
-            return data
+exports.callbackQuery = {
+    async main(ctx) {
+        if (!ctx.update.callback_query.data.startsWith("flight")) { return undefined }
+        let callbackData = ctx.update.callback_query
+        let message = callbackData.message
+        
+        let data = callbackData.data
+        const flightCallbackQueryPattern = /^flight\:\/\/null\?f=([A-Za-z0-9]+):([0-9]{3,4}):(\d{4})-(\d{2})-(\d{2}):(\d+)$/
+        let matches = data.match(flightCallbackQueryPattern)
+        if (matches) {
+            let partOfFlight = {
+                "AR": matches[1],
+                "NUMB": matches[2],
+                "url": `/flight-tracker/${matches[1]}/${matches[2]}?year=${matches[3]}&month=${matches[4]}&date=${matches[5]}&flightId=${matches[6]}`
+            }
+            
+            message = await this.telegram.editMessageText(
+                message.chat.id,
+                message.message_id,
+                null,
+                "正在查询该段航程信息～"
+            ).catch(err => {
+                throw err
+            })
+            
+            let result = await main.getDetailedData(partOfFlight)
+            
+            this.telegram.sendMessage(message.chat.id, result['input_message_content']['message_text'], { reply_to_message_id: ctx.update.callback_query.message.message_id, parse_mode: "Markdown" })
+            this.telegram.deleteMessage(message.chat.id, message.message_id)
+        }
+        else {
+            this.telegram.sendMessage(ctx.message.chat.id, "输入的内容好像有点问题呢... 再试一次？")
         }
     }
 }
@@ -365,9 +472,9 @@ exports.register = {
         // }
     ],
     callbackQuery: [
-        // {
-        //     function: 'main'
-        // }
+         {
+             function: 'main'
+         }
     ],
     scenes: [
         {
